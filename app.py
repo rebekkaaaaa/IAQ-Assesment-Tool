@@ -9,21 +9,30 @@ import streamlit as st
 
 st.set_page_config(page_title="IAQ Assessment Tool", page_icon="🏢", layout="wide")
 
-BASES = ["SIA 382/1", "SECO / ArGV 3", "Minergie-ECO"]
+BASES = ["SIA 382/1:2025", "SECO / ArGV 3", "SN EN 16798-1", "Minergie-ECO", "Bachelor-Thesis – eigenes Bewertungsmodell"]
+LEGACY_BASES = {"SIA 382/1": "SIA 382/1:2025"}
+PROFILE_DESCRIPTIONS = {
+    "SIA 382/1:2025": "Raumluftqualität und relevante Innenraumklimakriterien; Anwendbarkeit je Lüftungsart prüfen.",
+    "SECO / ArGV 3": "Arbeitsplatzbezogene Anforderungen an die Innenraumluft und das Raumklima.",
+    "SN EN 16798-1": "Kategorien der Innenraumqualität; Überschneidungen mit SIA transparent dokumentieren.",
+    "Minergie-ECO": "Nur für die gewählten IAQ-Parameter relevante Kriterien; kein gesamtes Gebäudezertifikat.",
+    "Bachelor-Thesis – eigenes Bewertungsmodell": "Eigenes Forschungsprofil: strengste fachlich vergleichbare und anwendbare Kriterien je Parameter; Herkunft dokumentieren. Noch keine automatische Kombination.",
+}
 PERIODS = ["Heizperiode", "Kühlperiode"]
 VENTILATIONS = ["Mechanische Lüftung", "Natürliche Lüftung / Fensterlüftung", "Kombinierte / hybride Lüftung"]
 STRATEGIES = ["Kontinuierliches Monitoring", "Temporäre Messkampagne", "Stichproben- / Kontrollmessung"]
-PARAMETERS = ["CO₂", "Temperatur", "Relative Feuchte", "Luftgeschwindigkeit", "TVOC", "Formaldehyd", "Weitere"]
-UNITS = {"CO₂": "ppm", "Temperatur": "°C", "Relative Feuchte": "%", "Luftgeschwindigkeit": "m/s", "TVOC": "µg/m³", "Formaldehyd": "µg/m³", "Weitere": ""}
-PROFILE_IDS = {(b, p): id_ for b, stem in zip(BASES, ["S", "E", "M"]) for p, id_ in zip(PERIODS, [stem+"H", stem+"K"])}
+PARAMETERS = ["CO₂", "Temperatur", "Relative Feuchte", "Luftgeschwindigkeit", "Weitere"]
+UNITS = {"CO₂": "ppm", "Temperatur": "°C", "Relative Feuchte": "%", "Luftgeschwindigkeit": "m/s", "Weitere": ""}
+PROFILE_IDS = {(b, p): id_ for b, stem in zip(BASES, ["S", "E", "N", "M", "BT"]) for p, id_ in zip(PERIODS, [stem+"H", stem+"K"])}
 STEPS = [
     ("B", "Gebäudespezifikation", "Gebäudetyp auswählen und Erweiterbarkeit dokumentieren"),
     ("BD", "Gebäudeweite Stammdaten", "Objekt, Standort und Grundnutzung erfassen"),
     ("NU", "Nutzungsprofil", "Betriebszeiten und typische Belegung hinterlegen"),
     ("GV", "Gültigkeit der Gebäudedaten", "Vollständigkeit und Aktualität prüfen"),
-    ("D", "Bewertungsgrundlage", "SIA, SECO oder Minergie-ECO auswählen"),
+    ("D", "Bewertungsgrundlage", "SIA, SECO, SN EN 16798-1, Minergie-ECO oder Bachelor-Thesis auswählen"),
     ("SS", "Heiz- / Kühlperiode", "Periode des Assessments auswählen"),
     ("RP", "Regelprofil", "Profil-ID aus Bewertungsgrundlage und Periode erzeugen; Grenzwerte später hinterlegen"),
+    ("BT", "Bachelor-Thesis Bewertungsmodell", "Fachlich vergleichbare Kriterien nach dokumentierter Methodik kombinieren; noch nicht automatisiert"),
     ("R", "Raum auswählen / hinzufügen", "Beliebig viele Räume getrennt erfassen"),
     ("RD", "Raumspezifikation", "Raumgrösse, Nutzung und Belegung dokumentieren"),
     ("LA", "Lüftungsart je Raum", "Mechanisch, natürlich oder hybrid unterscheiden"),
@@ -40,11 +49,11 @@ STEPS = [
 
 def new_project():
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "building": {"name": "", "object_id": "", "location": "", "building_type": "Büro- / Dienstleistungsgebäude (Raumnutzung 3)",
                      "use": "Büro / Dienstleistung", "operating_hours": "Mo–Fr, 08:00–17:00", "occupancy": None,
                      "notes": "", "confirmed": False},
-        "assessment": {"basis": BASES[0], "period": PERIODS[0], "purpose": "", "notes": ""},
+        "assessment": {"basis": BASES[0], "period": PERIODS[0], "purpose": "", "notes": "", "thesis_method": "", "thesis_sources": ""},
         "rooms": [], "step_notes": {},
     }
 
@@ -119,7 +128,7 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 st.title("IAQ Assessment Tool")
-st.caption("Funktionsprototyp · Büro- / Dienstleistungsgebäude · **ohne normative Grenzwerte und ohne Konformitätsentscheid**")
+st.caption("Funktionsprototyp · Schwerpunkt Innenraumluftqualität · **ohne normative Grenzwerte und ohne Konformitätsentscheid**")
 
 with st.sidebar:
     st.subheader("Navigation")
@@ -142,7 +151,7 @@ if page == "Übersicht":
     cols[3].metric("Räume ohne Hinweise", sum(not quality(r) for r in p["rooms"]))
     st.markdown("**Bearbeitungsablauf**")
     st.markdown("Gebäude → Bewertungsgrundlage → Heiz-/Kühlperiode → Raum → Lüftungsart → Messstrategie → Messdaten → Qualitätsprüfung → Export")
-    st.info("Die sechs Regelprofile sind strukturell vorbereitet. Es werden **keine Grenzwerte angewendet**, keine Ampelbewertung berechnet und keine Einhaltung einer Norm bestätigt.")
+    st.info("Die zehn Regelprofile sind strukturell vorbereitet. Es werden **keine Grenzwerte angewendet**, keine Ampelbewertung berechnet und keine Einhaltung einer Norm bestätigt.")
     if not p["rooms"]:
         st.warning("Noch keine Räume angelegt. Öffne «3 · Räume & Lüftung».")
     else:
@@ -178,9 +187,14 @@ elif page == "2 · Bewertungsprofil":
     st.info(f"Aktiver Regelprofil-Schlüssel: **{profile_summary()}** · {a['basis']} · {a['period']}")
     a["purpose"] = st.text_area("Ziel / Nachweiszweck der Gesamtbewertung", a["purpose"])
     a["notes"] = st.text_area("Anmerkungen zur Wahl der Grundlage", a["notes"])
-    st.markdown("**Vorgesehene sechs Regelprofile**")
-    st.dataframe(pd.DataFrame([{"Kürzel": code, "Grundlage": base, "Periode": period, "Grenzwerte": "Noch nicht hinterlegt", "Pflichtfeldregeln": "Noch festzulegen"} for (base, period), code in PROFILE_IDS.items()]), use_container_width=True, hide_index=True)
-    st.caption("Die Wahl des Regelprofils wird im Projekt gespeichert. Sie löst aktuell noch keine automatische normative Entscheidung aus.")
+    st.markdown("**Vorgesehene zehn Regelprofile**")
+    st.caption(PROFILE_DESCRIPTIONS[a["basis"]])
+    if a["basis"] == BASES[4]:
+        st.warning("Dieses Profil ist ein eigenständig entwickeltes Modell und keine amtliche Norm. Vergleichbarkeit und Anwendbarkeit jedes Kriteriums müssen vor einer automatischen Auswahl begründet werden.")
+        a["thesis_method"] = st.text_area("Methodik / Auswahl der strengsten vergleichbaren Anforderungen", a.get("thesis_method", ""))
+        a["thesis_sources"] = st.text_area("Herkunft der Kriterien / Normstellen", a.get("thesis_sources", ""))
+    st.dataframe(pd.DataFrame([{"Kürzel": code, "Grundlage": base, "Periode": period, "Grenzwerte": "Noch nicht hinterlegt", "Pflichtfeldregeln": "Noch festzulegen", "Geltungsbereich": PROFILE_DESCRIPTIONS[base]} for (base, period), code in PROFILE_IDS.items()]), use_container_width=True, hide_index=True)
+    st.caption("Die Wahl des Regelprofils wird im Projekt gespeichert. Sie löst aktuell noch keine automatische normative Entscheidung aus. Die Heiz-/Kühlperiode ist vorbereitet, ohne saisonale Unterschiede zu behaupten.")
 
 elif page == "3 · Räume & Lüftung":
     st.subheader("Raumspezifikation")
@@ -338,6 +352,7 @@ elif page == "6 · Export":
             imported = json.loads(uploaded_json.getvalue().decode("utf-8"))
             if not isinstance(imported, dict) or not all(k in imported for k in ("building", "assessment", "rooms", "step_notes")):
                 raise ValueError("Die Datei entspricht nicht dem erwarteten Projektformat.")
+            imported["assessment"]["basis"] = LEGACY_BASES.get(imported["assessment"].get("basis"), imported["assessment"].get("basis"))
             if not isinstance(imported["rooms"], list) or imported["assessment"].get("basis") not in BASES or imported["assessment"].get("period") not in PERIODS:
                 raise ValueError("Ungültige Projektstruktur oder unbekanntes Profil.")
             st.session_state.project = imported
